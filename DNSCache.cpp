@@ -18,10 +18,7 @@ void DNSCache::update(const std::string& name, const std::string& ip)
 	std::lock_guard<std::mutex> lock(m_mutex);
 	if (m_cache.find(name) != m_cache.end()) {
 		DNSCacheNode* node = m_cache[name];
-
 		delete_node(node);
-
-		DNSCacheNode* temp = m_head->next;
 		move2head(node);
 		node->ip = ip;
 	}
