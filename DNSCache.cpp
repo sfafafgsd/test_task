@@ -31,7 +31,7 @@ void DNSCache::update(const std::string& name, const std::string& ip)
 		if (m_cache.size() == m_size) {
 			DNSCacheNode* tmp = m_tail->prev;
 			m_cache.erase(tmp->name);
-            delete_node(tmp);
+			delete_node(tmp);
 			move2head(new_node);
 			m_cache[name] = new_node;
 			delete tmp;
