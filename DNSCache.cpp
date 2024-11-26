@@ -1,52 +1,57 @@
 #include "DNSCache.hpp"
 
-DNSCacheNode::DNSCacheNode() : next(nullptr), prev(nullptr), ip(""), name("") {}
-DNSCacheNode::DNSCacheNode(const std::string& _name, const std::string& _ip) : ip(_ip), name(_name), next(nullptr), prev(nullptr) {}
+DNSCacheNode::DNSCacheNode() {}
+DNSCacheNode::DNSCacheNode(const std::string_view& _name, const std::string_view& _ip) : ip(_ip), name(_name) {}
 
 
-DNSCache::DNSCache(size_t max_size) : m_size(max_size)
+DNSCache::DNSCache(size_t max_size) : m_size(max_size + 2)
 {
-	m_head = new DNSCacheNode;
-	m_tail = new DNSCacheNode;
+	m_allocated_nodes = std::make_unique<DNSCacheNode[]>(m_size);
+
+	m_head = &m_allocated_nodes[m_node_counter++];
+	m_tail = &m_allocated_nodes[m_node_counter++];
 
 	m_head->next = m_tail;
 	m_tail->prev = m_head;
 }
 
-void DNSCache::update(const std::string& name, const std::string& ip)
+
+void DNSCache::update(const std::string_view& name, const std::string_view& ip)
 {
 	std::lock_guard<std::mutex> lock(m_mutex);
 	if (m_cache.find(name) != m_cache.end()) {
 		DNSCacheNode* node = m_cache[name];
-		delete_node(node);
+		remove_node(node);
 		move2head(node);
 		node->ip = ip;
 	}
 	else 
 	{
-		DNSCacheNode* new_node = new DNSCacheNode(name, ip);
-		if (m_cache.size() == m_size) {
-			DNSCacheNode* tmp = m_tail->prev;
-			m_cache.erase(tmp->name);
-			delete_node(tmp);
-			move2head(new_node);
-			m_cache[name] = new_node;
-			delete tmp;
+		DNSCacheNode *new_node = nullptr;
+		if (m_node_counter != m_size)
+		{
+			new_node = &m_allocated_nodes[m_node_counter++];
 		}
-		else {
-			move2head(new_node);
-			m_cache[name] = new_node;
+		else
+		{
+			new_node = m_tail->prev;
+			m_cache.erase(new_node->name);
+			remove_node(new_node);
 		}
+		new_node->ip = ip;
+		new_node->name = name;
+		move2head(new_node);
+		m_cache[name] = new_node;
 	}
 	
 }
 
-std::string DNSCache::resolve(const std::string& name)
+std::string_view DNSCache::resolve(const std::string_view& name)
 {
 	std::lock_guard<std::mutex> lock(m_mutex);
 	if (m_cache.find(name) != m_cache.end()) {
 		DNSCacheNode* node = m_cache[name];
-		delete_node(node);
+		remove_node(node);
 		move2head(node);
 
 		return node->ip;
@@ -54,7 +59,7 @@ std::string DNSCache::resolve(const std::string& name)
 	return "";
 }
 
-void DNSCache::delete_node(DNSCacheNode* node)
+void DNSCache::remove_node(DNSCacheNode* node)
 {
 	node->prev->next = node->next;
 	node->next->prev = node->prev;
@@ -70,13 +75,3 @@ void DNSCache::move2head(DNSCacheNode* node)
 	temp->prev = node;
 }
 
-DNSCache::~DNSCache()
-{
-	DNSCacheNode* tmp = m_head;
-	DNSCacheNode* next;
-	while (tmp) {
-		next = tmp->next;
-		delete tmp;
-		tmp = next;
-	}
-}
